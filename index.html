@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth 2.0 Simulator</title>
+    <style>
+        /* Grundlegende Styles */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        /* Simuliertes Anwendungsfenster */
+        .window {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            width: 450px;
+            min-height: 400px;
+            border: 1px solid #ddd;
+            transition: filter 0.3s ease;
+        }
+        
+        /* Blackbox für den Hintergrundprozess */
+        #log-container {
+            background-color: #2d3748;
+            color: #f7fafc;
+            font-family: "Courier New", Courier, monospace;
+            height: 400px;
+            overflow-y: auto;
+            border-color: #4A5568;
+        }
+        
+        h1, h2 {
+            color: #1a202c;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+
+        #log-container h2 {
+            color: #e2e8f0;
+            border-bottom-color: #4A5568;
+        }
+
+        p, ul { line-height: 1.6; }
+
+        /* Button-Styles */
+        button {
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        button:hover { background-color: #357ae8; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        
+        #reset-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: auto;
+            background-color: #db4437;
+        }
+        #reset-btn:hover { background-color: #c5372c; }
+
+        /* *** NEU: Styles für den modalen Dialog *** */
+        #modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none; /* Klicks durchlassen, wenn unsichtbar */
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        #modal-overlay.visible {
+            opacity: 1;
+            pointer-events: auto; /* Klicks empfangen, wenn sichtbar */
+        }
+        
+        #provider-container {
+            transform: scale(0.95);
+            transition: transform 0.3s ease-in-out;
+        }
+
+        #modal-overlay.visible #provider-container {
+            transform: scale(1);
+        }
+
+        /* Log-Nachrichten */
+        #log-output { white-space: pre-wrap; font-size: 14px; }
+        .log-entry { padding: 8px; border-bottom: 1px dashed #4A5568; }
+        .log-entry:last-child { border-bottom: none; }
+        .token { color: #68D391; word-break: break-all; }
+        .code { color: #F6E05E; word-break: break-all; }
+        .info { color: #90CDF4; }
+        
+        /* Sonstige Styles */
+        .hidden { display: none; }
+        #scopes-list { list-style-type: '✅ '; padding-left: 20px; background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 15px; }
+        #app-data-display { margin-top: 20px; padding: 15px; background: #e6f4ea; border: 1px solid #c8e6c9; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Fenster 1: Die Drittanbieter-App -->
+        <div id="app-container" class="window">
+            <h1>Willkommen bei der "FotoCollage"-App</h1>
+            <p>Mit unserer App können Sie wunderschöne Collagen aus Ihren Fotos erstellen, die bei "PixelCloud" gespeichert sind.</p>
+            <p>Um fortzufahren, verbinden Sie bitte Ihr PixelCloud-Konto.</p>
+            
+            <div id="app-initial-view">
+                <button id="connect-btn">Mit PixelCloud verbinden</button>
+            </div>
+
+            <div id="app-connected-view" class="hidden">
+                <h2>Erfolgreich verbunden!</h2>
+                <p>Wir haben Zugriff auf Ihre Fotos erhalten und können nun Ihre Collagen erstellen.</p>
+                <div id="app-data-display">
+                    <p>Lade Fotos von PixelCloud...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fenster 2: Die Blackbox, die den Hintergrundprozess zeigt -->
+        <div id="log-container" class="window">
+            <h2>Was passiert im Hintergrund?</h2>
+            <div id="log-output"></div>
+        </div>
+    </div>
+
+    <!-- *** NEU: Der modale Dialog für den Anbieter *** -->
+    <div id="modal-overlay">
+        <div id="provider-container" class="window">
+            <h1>Anmeldung bei <strong>PixelCloud</strong></h1>
+            <p>Die Anwendung <strong>"FotoCollage-App"</strong> möchte auf Ihr Konto zugreifen.</p>
+            <p>Bitte bestätigen Sie, dass Sie der App folgende Berechtigungen erteilen möchten:</p>
+            <ul id="scopes-list">
+                <li>Ihre Fotos ansehen (nur Lesezugriff)</li>
+                <li>Ihre grundlegenden Profilinformationen abrufen</li>
+            </ul>
+            <p><small>Die "FotoCollage-App" wird Ihr Passwort <strong>niemals</strong> sehen.</small></p>
+            <button id="allow-btn">Zugriff erlauben</button>
+        </div>
+    </div>
+
+
+    <button id="reset-btn">Simulation zurücksetzen</button>
+
+    <script>
+        // DOM-Elemente
+        const modalOverlay = document.getElementById('modal-overlay');
+        const logOutput = document.getElementById('log-output');
+        
+        const connectBtn = document.getElementById('connect-btn');
+        const allowBtn = document.getElementById('allow-btn');
+        const resetBtn = document.getElementById('reset-btn');
+
+        const appInitialView = document.getElementById('app-initial-view');
+        const appConnectedView = document.getElementById('app-connected-view');
+        const appDataDisplay = document.getElementById('app-data-display');
+        
+        const FAKE_NETWORK_DELAY = 1200;
+
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.classList.add('log-entry', type);
+            entry.innerHTML = message;
+            logOutput.appendChild(entry);
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+
+        // SCHRITT 1: Benutzer klickt auf "Verbinden"
+        connectBtn.addEventListener('click', () => {
+            log('<strong>SCHRITT 1: Autorisierungsanfrage</strong><br>Der Benutzer möchte sein Konto verbinden. Die App leitet ihn zum Anbieter (PixelCloud) weiter.');
+            
+            // UI-Update: Zeige den modalen Dialog an
+            modalOverlay.classList.add('visible');
+        });
+
+        // SCHRITT 2 & 3: Benutzer erlaubt den Zugriff im modalen Dialog
+        allowBtn.addEventListener('click', () => {
+            log('<strong>SCHRITT 2: Zustimmung des Benutzers</strong><br>Der Benutzer hat den Berechtigungen zugestimmt und auf "Erlauben" geklickt.');
+            
+            const authorizationCode = `auth_code_${Math.random().toString(36).substring(2, 15)}`;
+            log(`<strong>SCHRITT 3: Autorisierungscode erhalten</strong><br>PixelCloud generiert einen einmaligen Code und leitet den Benutzer zurück zur App. <br>Code: <span class="code">${authorizationCode}</span>`);
+
+            // UI-Update: Modalen Dialog ausblenden
+            modalOverlay.classList.remove('visible');
+            allowBtn.disabled = true;
+
+            log('Die App hat den Code erhalten. Nun beginnt der unsichtbare Teil...');
+            setTimeout(() => {
+                exchangeCodeForToken(authorizationCode);
+            }, FAKE_NETWORK_DELAY);
+        });
+
+        // SCHRITT 4: Code gegen Token tauschen (Hintergrundprozess)
+        function exchangeCodeForToken(code) {
+            log(`<strong>SCHRITT 4: Code gegen Token tauschen</strong><br>Die App kontaktiert PixelCloud im Hintergrund (Server-zu-Server) und sendet den Autorisierungscode.`);
+            
+            setTimeout(() => {
+                const accessToken = `access_token_${Math.random().toString(36).substring(2)}`;
+                log(`PixelCloud validiert den Code und sendet einen Access Token zurück. <br>Token: <span class="token">${accessToken}</span>`);
+                fetchDataWithToken(accessToken);
+            }, FAKE_NETWORK_DELAY);
+        }
+
+        // SCHRITT 5: Daten mit dem Token abrufen
+        function fetchDataWithToken(token) {
+            log(`<strong>SCHRITT 5: Daten abrufen (API-Call)</strong><br>Die App verwendet den Access Token, um auf die geschützten Ressourcen (die Fotos) bei PixelCloud zuzugreifen.`);
+            
+            appInitialView.classList.add('hidden');
+            appConnectedView.classList.remove('hidden');
+
+            setTimeout(() => {
+                const fakePhotos = [
+                    { id: 'p1', name: 'Urlaub_am_Meer.jpg' },
+                    { id: 'p2', name: 'Geburtstag_2023.png' },
+                    { id: 'p3', name: 'Wanderung_Alpen.jpeg' }
+                ];
+                log(`PixelCloud validiert den Token und gibt die angeforderten Fotodaten frei.`);
+                
+                appDataDisplay.innerHTML = '<h3>Ihre Fotos:</h3>';
+                const ul = document.createElement('ul');
+                fakePhotos.forEach(photo => {
+                    const li = document.createElement('li');
+                    li.textContent = photo.name;
+                    ul.appendChild(li);
+                });
+                appDataDisplay.appendChild(ul);
+                
+                log('<strong>ABGESCHLOSSEN!</strong><br>Die App hat die Daten sicher erhalten, ohne jemals das Passwort des Benutzers zu kennen.');
+            }, FAKE_NETWORK_DELAY);
+        }
+        
+        // Simulation zurücksetzen
+        function resetSimulation() {
+            modalOverlay.classList.remove('visible');
+            appInitialView.classList.remove('hidden');
+            appConnectedView.classList.add('hidden');
+            appDataDisplay.innerHTML = '<p>Lade Fotos von PixelCloud...</p>';
+            allowBtn.disabled = false;
+            logOutput.innerHTML = '';
+            log('Simulation neu gestartet. Klicken Sie in der "FotoCollage"-App auf "Mit PixelCloud verbinden", um den OAuth 2.0-Ablauf zu beginnen.');
+        }
+
+        resetBtn.addEventListener('click', resetSimulation);
+        resetSimulation();
+    </script>
+</body>
+</html>
