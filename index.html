@@ -5,272 +5,218 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OAuth 2.0 Simulator</title>
     <style>
-        /* Grundlegende Styles */
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f0f2f5;
-            color: #333;
-            margin: 0;
-            padding: 20px;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; color: #333; margin: 0; padding: 20px; }
+        .container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+        .window { background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); padding: 25px; width: 450px; min-height: 400px; border: 1px solid #ddd; }
+        #log-container { background-color: #2d3748; color: #f7fafc; font-family: "Courier New", Courier, monospace; height: 400px; display: flex; flex-direction: column; }
+        .log-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #4A5568; padding-bottom: 10px; margin-bottom: 10px; }
+        #log-output { flex-grow: 1; overflow-y: auto; white-space: pre-wrap; font-size: 14px; }
+        .log-entry { padding: 8px; border-bottom: 1px dashed #4A5568; }
+        .log-entry strong { color: #90CDF4; }
 
-        .container {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-
-        /* Simuliertes Anwendungsfenster */
-        .window {
-            background-color: #ffffff;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            padding: 25px;
-            width: 450px;
-            min-height: 400px;
-            border: 1px solid #ddd;
-            transition: filter 0.3s ease;
-        }
+        #step-controls { display: flex; gap: 10px; padding: 10px 0 0; border-top: 1px solid #4A5568; }
+        #step-controls button { width: 50%; margin: 0; font-size: 14px; padding: 8px; background-color: #4A5568; }
+        #step-controls button:disabled { background-color: #2d3748; color: #718096; cursor: not-allowed; }
+        .hidden { display: none !important; }
         
-        /* Blackbox für den Hintergrundprozess */
-        #log-container {
-            background-color: #2d3748;
-            color: #f7fafc;
-            font-family: "Courier New", Courier, monospace;
-            height: 400px;
-            overflow-y: auto;
-            border-color: #4A5568;
-        }
+        #modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: flex-start; padding-top: 5vh; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease-in-out; }
+        #modal-overlay.visible { opacity: 1; pointer-events: auto; }
+
+        #visualization-container { width: 100%; max-width: 920px; margin: 20px auto 0; background-color: #ffffff; border-radius: 8px; padding: 20px; position: relative; height: 450px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
+        .lifeline-box { position: absolute; width: 22%; border: 2px solid #333; background-color: #fff; text-align: center; padding: 10px; font-weight: bold; box-sizing: border-box; font-size: 14px; }
+        #lifeline-box-user { top: 10px; left: 5%; }
+        #lifeline-box-client { top: 10px; left: 27.5%; }
+        #lifeline-box-auth { top: 10px; left: 50%; }
+        #lifeline-box-resource { top: 10px; right: 5%; }
+
+        #uml-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .lifeline { stroke: #333; stroke-width: 1; stroke-dasharray: 5 5; }
+        .message-line, .reply-line { stroke: #333; stroke-width: 2; fill: none; }
+        .reply-line { stroke-dasharray: 8 4; }
+        .message-label { font-family: "Courier New", Courier, monospace; font-size: 14px; fill: #2c5282; font-weight: bold; opacity: 0; animation: fade-in-label 0.5s ease-out 0.4s forwards; }
+        .activation-bar { fill: #4285F4; stroke: #357ae8; stroke-width: 1; opacity: 0; animation: fade-in-label 0.3s forwards; }
+        @keyframes fade-in-label { to { opacity: 1; } }
+
+        button { background-color: #4285F4; color: white; border: none; padding: 12px 20px; border-radius: 5px; font-size: 16px; cursor: pointer; }
         
-        h1, h2 {
-            color: #1a202c;
-            border-bottom: 2px solid #e2e8f0;
-            padding-bottom: 10px;
-            margin-top: 0;
-        }
-
-        #log-container h2 {
-            color: #e2e8f0;
-            border-bottom-color: #4A5568;
-        }
-
-        p, ul { line-height: 1.6; }
-
-        /* Button-Styles */
-        button {
-            background-color: #4285F4;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-            width: 100%;
-            margin-top: 15px;
-        }
-
-        button:hover { background-color: #357ae8; }
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
-        
+        /* NEU: Prominenter Reset-Button */
         #reset-btn {
             position: fixed;
             bottom: 20px;
             right: 20px;
             width: auto;
             background-color: #db4437;
+            z-index: 1001;
+            padding: 15px 25px;
+            font-size: 16px;
+            font-weight: bold;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transition: transform 0.2s, background-color 0.2s;
         }
-        #reset-btn:hover { background-color: #c5372c; }
+        #reset-btn:hover { background-color: #c5372c; transform: translateY(-2px); }
 
-        /* *** NEU: Styles für den modalen Dialog *** */
-        #modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.6);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            opacity: 0;
-            pointer-events: none; /* Klicks durchlassen, wenn unsichtbar */
-            transition: opacity 0.3s ease-in-out;
-        }
-
-        #modal-overlay.visible {
-            opacity: 1;
-            pointer-events: auto; /* Klicks empfangen, wenn sichtbar */
-        }
-        
-        #provider-container {
-            transform: scale(0.95);
-            transition: transform 0.3s ease-in-out;
-        }
-
-        #modal-overlay.visible #provider-container {
-            transform: scale(1);
-        }
-
-        /* Log-Nachrichten */
-        #log-output { white-space: pre-wrap; font-size: 14px; }
-        .log-entry { padding: 8px; border-bottom: 1px dashed #4A5568; }
-        .log-entry:last-child { border-bottom: none; }
-        .token { color: #68D391; word-break: break-all; }
-        .code { color: #F6E05E; word-break: break-all; }
-        .info { color: #90CDF4; }
-        
-        /* Sonstige Styles */
-        .hidden { display: none; }
-        #scopes-list { list-style-type: '✅ '; padding-left: 20px; background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 15px; }
-        #app-data-display { margin-top: 20px; padding: 15px; background: #e6f4ea; border: 1px solid #c8e6c9; border-radius: 5px; }
+        .token { color: #68D391; word-break: break-all; } .code { color: #F6E05E; word-break: break-all; }
     </style>
 </head>
 <body>
-
     <div class="container">
-        <!-- Fenster 1: Die Drittanbieter-App -->
-        <div id="app-container" class="window">
-            <h1>Willkommen bei der "FotoCollage"-App</h1>
-            <p>Mit unserer App können Sie wunderschöne Collagen aus Ihren Fotos erstellen, die bei "PixelCloud" gespeichert sind.</p>
-            <p>Um fortzufahren, verbinden Sie bitte Ihr PixelCloud-Konto.</p>
-            
-            <div id="app-initial-view">
-                <button id="connect-btn">Mit PixelCloud verbinden</button>
-            </div>
-
-            <div id="app-connected-view" class="hidden">
-                <h2>Erfolgreich verbunden!</h2>
-                <p>Wir haben Zugriff auf Ihre Fotos erhalten und können nun Ihre Collagen erstellen.</p>
-                <div id="app-data-display">
-                    <p>Lade Fotos von PixelCloud...</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Fenster 2: Die Blackbox, die den Hintergrundprozess zeigt -->
-        <div id="log-container" class="window">
-            <h2>Was passiert im Hintergrund?</h2>
-            <div id="log-output"></div>
-        </div>
+        <div id="app-container" class="window"><div id="app-initial-view"><h1>Willkommen bei der "Kalender-Analyse"-App</h1><p><strong>Resource Owner (Sie):</strong> Sie möchten dieser App Zugriff auf Ihre Kalender bei Google geben.</p><button id="connect-btn">Mit Google verbinden</button></div><div id="app-connected-view" class="hidden"><h2>Erfolgreich verbunden!</h2><p>Der Client hat nun Zugriff und kann Ihre Kalenderdaten laden.</p><div id="app-data-display"></div></div></div>
+        <div id="log-container" class="window"><div class="log-header"><h2>Ablauf des OAuth 2.0 Prozesses</h2><label class="detail-toggle"><input type="checkbox" id="detail-checkbox"> Im Detail anzeigen</label></div><div id="log-output"></div><div id="step-controls" class="hidden"><button id="prev-step-btn" disabled>Vorheriger Schritt</button><button id="next-step-btn" disabled>Nächster Schritt</button></div></div>
     </div>
-
-    <!-- *** NEU: Der modale Dialog für den Anbieter *** -->
-    <div id="modal-overlay">
-        <div id="provider-container" class="window">
-            <h1>Anmeldung bei <strong>PixelCloud</strong></h1>
-            <p>Die Anwendung <strong>"FotoCollage-App"</strong> möchte auf Ihr Konto zugreifen.</p>
-            <p>Bitte bestätigen Sie, dass Sie der App folgende Berechtigungen erteilen möchten:</p>
-            <ul id="scopes-list">
-                <li>Ihre Fotos ansehen (nur Lesezugriff)</li>
-                <li>Ihre grundlegenden Profilinformationen abrufen</li>
-            </ul>
-            <p><small>Die "FotoCollage-App" wird Ihr Passwort <strong>niemals</strong> sehen.</small></p>
-            <button id="allow-btn">Zugriff erlauben</button>
-        </div>
+    <div id="visualization-container" class="hidden">
+        <div id="lifeline-box-user" class="lifeline-box">Resource Owner<br>(Sie)</div><div id="lifeline-box-client" class="lifeline-box">Client<br>("Kalender-Analyse"-App)</div><div id="lifeline-box-auth" class="lifeline-box">Authorization Server<br>(Google Login)</div><div id="lifeline-box-resource" class="lifeline-box">Resource Server<br>(Google Kalender API)</div>
+        <svg id="uml-svg"></svg>
     </div>
-
-
+    <div id="modal-overlay"><div id="provider-container" class="window"><h1>Anmeldung bei <strong>Google</strong></h1><p>Der <strong>Client "Kalender-Analyse"</strong> möchte auf Ihr Google-Konto zugreifen.</p><p>Berechtigungen (Scopes):</p><ul style="list-style-type: '✅ '; padding-left: 20px;"><li>Ihre Kalender lesen</li><li>Ihre E-Mail-Adresse sehen</li></ul><p><small>Der Client wird Ihr Passwort <strong>niemals</strong> sehen.</small></p><button id="allow-btn">Zulassen</button></div></div>
     <button id="reset-btn">Simulation zurücksetzen</button>
-
     <script>
-        // DOM-Elemente
-        const modalOverlay = document.getElementById('modal-overlay');
-        const logOutput = document.getElementById('log-output');
-        
-        const connectBtn = document.getElementById('connect-btn');
-        const allowBtn = document.getElementById('allow-btn');
-        const resetBtn = document.getElementById('reset-btn');
+        const getEl = (id) => document.getElementById(id);
+        const modalOverlay = getEl('modal-overlay'), logOutput = getEl('log-output'), connectBtn = getEl('connect-btn'),
+              allowBtn = getEl('allow-btn'), resetBtn = getEl('reset-btn'), appInitialView = getEl('app-initial-view'),
+              appConnectedView = getEl('app-connected-view'), appDataDisplay = getEl('app-data-display'),
+              detailCheckbox = getEl('detail-checkbox'), vizContainer = getEl('visualization-container'),
+              umlSvg = getEl('uml-svg'), stepControls = getEl('step-controls'), 
+              prevStepBtn = getEl('prev-step-btn'), nextStepBtn = getEl('next-step-btn');
 
-        const appInitialView = document.getElementById('app-initial-view');
-        const appConnectedView = document.getElementById('app-connected-view');
-        const appDataDisplay = document.getElementById('app-data-display');
-        
-        const FAKE_NETWORK_DELAY = 1200;
+        let currentStep = -1, simulationSteps = [], lifelineX = {}, authorizationCode, accessToken;
 
-        function log(message, type = 'info') {
-            const entry = document.createElement('div');
-            entry.classList.add('log-entry', type);
-            entry.innerHTML = message;
-            logOutput.appendChild(entry);
-            logOutput.scrollTop = logOutput.scrollHeight;
+        function createSVGElement(tag, attributes) {
+            const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+            for (const key in attributes) { el.setAttribute(key, attributes[key]); }
+            return el;
         }
 
-        // SCHRITT 1: Benutzer klickt auf "Verbinden"
+        function drawUMLBase() {
+            umlSvg.innerHTML = '';
+            const boxes = { user: getEl('lifeline-box-user'), client: getEl('lifeline-box-client'), auth: getEl('lifeline-box-auth'), resource: getEl('lifeline-box-resource') };
+            const startY = boxes.user.offsetTop + boxes.user.offsetHeight;
+            const endY = vizContainer.offsetHeight - 20;
+            for (const key in boxes) {
+                lifelineX[key] = boxes[key].offsetLeft + boxes[key].offsetWidth / 2;
+                umlSvg.appendChild(createSVGElement('line', { class: 'lifeline', x1: lifelineX[key], y1: startY, x2: lifelineX[key], y2: endY }));
+            }
+        }
+        
+        function drawMessage(fromKey, toKey, yPos, label, isReply = false) {
+            const fromX = lifelineX[fromKey], toX = lifelineX[toKey];
+            const markerId = `arrowhead-${Math.random()}`;
+            const defs = createSVGElement('defs');
+            const marker = createSVGElement('marker', { id: markerId, markerWidth: 10, markerHeight: 7, refX: 8, refY: 3.5, orient: 'auto', fill: '#333' });
+            marker.appendChild(createSVGElement('polygon', { points: '0 0, 10 3.5, 0 7' }));
+            defs.appendChild(marker);
+            umlSvg.appendChild(defs);
+            const path = createSVGElement('path', { d: `M ${fromX} ${yPos} L ${toX} ${yPos}`, class: isReply ? 'reply-line' : 'message-line', 'marker-end': `url(#${markerId})` });
+            // NEU: Return-Nachrichten werden unter der Linie platziert
+            const text = createSVGElement('text', { x: fromX + (toX - fromX) / 2, y: isReply ? yPos + 20 : yPos - 10, 'text-anchor': 'middle', class: 'message-label' });
+            text.textContent = label;
+            umlSvg.appendChild(path); umlSvg.appendChild(text);
+        }
+        
+        function drawActivationBar(onKey, startY, endY) {
+            if(lifelineX[onKey]) umlSvg.appendChild(createSVGElement('rect', { class: 'activation-bar', x: lifelineX[onKey] - 5, y: startY, width: 10, height: endY - startY }));
+        }
+
+        function log(message) { logOutput.innerHTML += `<div class="log-entry">${message}</div>`; logOutput.scrollTop = logOutput.scrollHeight; }
+
+        function setupSimulationSteps() {
+            const y = { y1: 110, y2: 150, y3: 190, y4: 230, y5: 270, y6: 310, y7: 350, y8: 390 };
+            simulationSteps = [
+                { description: `<strong>Schritt 1: Anfrage.</strong><br>Sie klicken im Client auf "Verbinden".`, action: () => {
+                    drawMessage('user', 'client', y.y1, '1. Klick: verbinden()'); drawActivationBar('client', y.y1, y.y2);
+                }},
+                { description: `<strong>Schritt 1 (Forts.):</strong><br>Der Client leitet Ihren Browser zum Authorization Server weiter.`, action: () => {
+                    // NEU: Bereinigte, symbolische Labels
+                    drawMessage('client', 'auth', y.y2, '2. GET /authorize'); modalOverlay.classList.add('visible');
+                }},
+                { description: `<strong>Schritt 2: Authentifizierung & Zustimmung.</strong><br>Sie geben Ihr Passwort ein und erlauben den Zugriff.`, action: () => {
+                    modalOverlay.classList.remove('visible'); drawMessage('user', 'auth', y.y3, '3. Login & Zustimmung');
+                }},
+                { description: `<strong>Schritt 3: Autorisierungscode.</strong><br>Der Authorization Server leitet Sie mit einem Code zurück zum Client.<br>Code: <span class="code">${authorizationCode}</span>`, action: () => {
+                    drawActivationBar('auth', y.y3, y.y4);
+                    drawMessage('auth', 'client', y.y4, `4. Authorization Code`, true);
+                    log(`Sichtbarer Teil beendet. Steuern Sie nun die unsichtbaren Schritte.`); stepControls.classList.remove('hidden');
+                }},
+                { description: `<strong>Schritt 4: Austausch im Hintergrund.</strong><br>Der Client sendet den Code an den Auth. Server und erhält einen Access Token.<br>Token: <span class="token">${accessToken}</span>`, action: () => {
+                    drawActivationBar('auth', y.y5, y.y6); drawMessage('client', 'auth', y.y5, `5a. Code anfordern`);
+                    setTimeout(() => drawMessage('auth', 'client', y.y6, `5b. Access Token`, true), 800);
+                }},
+                { description: `<strong>Schritt 5: Zugriff auf Ressourcen.</strong><br>Der Client nutzt den Token, um beim Resource Server die Daten anzufordern.`, action: () => {
+                    appInitialView.classList.add('hidden'); appConnectedView.classList.remove('hidden'); appDataDisplay.innerHTML = '<p>Lade Kalenderdaten...</p>';
+                    drawActivationBar('resource', y.y7, y.y8); drawMessage('client', 'resource', y.y7, `6a. GET /data mit Token`);
+                    setTimeout(() => { 
+                        drawMessage('resource', 'client', y.y8, '6b. [Kalenderdaten]', true); 
+                        appDataDisplay.innerHTML = '<h3>Ihre Termine:</h3><ul><li>10:00 - Projektmeeting</li></ul>'; log('<strong>ABGESCHLOSSEN!</strong>');
+                    }, 800);
+                }}
+            ];
+        }
+
+        async function runAutomaticSimulation() {
+            connectBtn.disabled = true;
+            log('<strong>Schritt 1 & 2:</strong> Anfrage & Zustimmung...'); modalOverlay.classList.add('visible');
+            await new Promise(r => setTimeout(r, 1200));
+            modalOverlay.classList.remove('visible'); log(`<strong>Schritt 3:</strong> Authorization Code erhalten.`);
+            await new Promise(r => setTimeout(r, 800)); log('<strong>Schritt 4:</strong> Code wird gegen Access Token getauscht.');
+            await new Promise(r => setTimeout(r, 1200)); log('<strong>Schritt 5:</strong> Mit Token werden Daten geladen.');
+            appInitialView.classList.add('hidden'); appConnectedView.classList.remove('hidden');
+            appDataDisplay.innerHTML = '<h3>Ihre Termine:</h3><ul><li>10:00 - Projektmeeting</li></ul>';
+            log('<strong>ABGESCHLOSSEN!</strong><br><br>Das war die einfache Ansicht. Starten Sie neu und aktivieren Sie "Im Detail anzeigen", um den Prozess Schritt für Schritt zu sehen!');
+        }
+
+        function executeStep(stepIndex) {
+            if (stepIndex < 0 || stepIndex >= simulationSteps.length) return;
+            const step = simulationSteps[stepIndex];
+            log(step.description); step.action();
+            currentStep = stepIndex; updateStepControls();
+        }
+
+        function updateStepControls() {
+            const backgroundStepsStart = 4;
+            prevStepBtn.disabled = currentStep < backgroundStepsStart;
+            // NEU: Korrekte Deaktivierung des "Next" Buttons
+            nextStepBtn.disabled = currentStep >= simulationSteps.length - 1;
+        }
+
         connectBtn.addEventListener('click', () => {
-            log('<strong>SCHRITT 1: Autorisierungsanfrage</strong><br>Der Benutzer möchte sein Konto verbinden. Die App leitet ihn zum Anbieter (PixelCloud) weiter.');
-            
-            // UI-Update: Zeige den modalen Dialog an
-            modalOverlay.classList.add('visible');
+            if (detailCheckbox.checked) { if(currentStep === -1) { executeStep(0); setTimeout(() => executeStep(1), 500); } }
+            else { runAutomaticSimulation(); }
         });
-
-        // SCHRITT 2 & 3: Benutzer erlaubt den Zugriff im modalen Dialog
-        allowBtn.addEventListener('click', () => {
-            log('<strong>SCHRITT 2: Zustimmung des Benutzers</strong><br>Der Benutzer hat den Berechtigungen zugestimmt und auf "Erlauben" geklickt.');
-            
-            const authorizationCode = `auth_code_${Math.random().toString(36).substring(2, 15)}`;
-            log(`<strong>SCHRITT 3: Autorisierungscode erhalten</strong><br>PixelCloud generiert einen einmaligen Code und leitet den Benutzer zurück zur App. <br>Code: <span class="code">${authorizationCode}</span>`);
-
-            // UI-Update: Modalen Dialog ausblenden
-            modalOverlay.classList.remove('visible');
-            allowBtn.disabled = true;
-
-            log('Die App hat den Code erhalten. Nun beginnt der unsichtbare Teil...');
-            setTimeout(() => {
-                exchangeCodeForToken(authorizationCode);
-            }, FAKE_NETWORK_DELAY);
-        });
-
-        // SCHRITT 4: Code gegen Token tauschen (Hintergrundprozess)
-        function exchangeCodeForToken(code) {
-            log(`<strong>SCHRITT 4: Code gegen Token tauschen</strong><br>Die App kontaktiert PixelCloud im Hintergrund (Server-zu-Server) und sendet den Autorisierungscode.`);
-            
-            setTimeout(() => {
-                const accessToken = `access_token_${Math.random().toString(36).substring(2)}`;
-                log(`PixelCloud validiert den Code und sendet einen Access Token zurück. <br>Token: <span class="token">${accessToken}</span>`);
-                fetchDataWithToken(accessToken);
-            }, FAKE_NETWORK_DELAY);
-        }
-
-        // SCHRITT 5: Daten mit dem Token abrufen
-        function fetchDataWithToken(token) {
-            log(`<strong>SCHRITT 5: Daten abrufen (API-Call)</strong><br>Die App verwendet den Access Token, um auf die geschützten Ressourcen (die Fotos) bei PixelCloud zuzugreifen.`);
-            
-            appInitialView.classList.add('hidden');
-            appConnectedView.classList.remove('hidden');
-
-            setTimeout(() => {
-                const fakePhotos = [
-                    { id: 'p1', name: 'Urlaub_am_Meer.jpg' },
-                    { id: 'p2', name: 'Geburtstag_2023.png' },
-                    { id: 'p3', name: 'Wanderung_Alpen.jpeg' }
-                ];
-                log(`PixelCloud validiert den Token und gibt die angeforderten Fotodaten frei.`);
-                
-                appDataDisplay.innerHTML = '<h3>Ihre Fotos:</h3>';
-                const ul = document.createElement('ul');
-                fakePhotos.forEach(photo => {
-                    const li = document.createElement('li');
-                    li.textContent = photo.name;
-                    ul.appendChild(li);
-                });
-                appDataDisplay.appendChild(ul);
-                
-                log('<strong>ABGESCHLOSSEN!</strong><br>Die App hat die Daten sicher erhalten, ohne jemals das Passwort des Benutzers zu kennen.');
-            }, FAKE_NETWORK_DELAY);
-        }
         
-        // Simulation zurücksetzen
+        allowBtn.addEventListener('click', () => { if(detailCheckbox.checked && currentStep === 1) { executeStep(2); setTimeout(() => executeStep(3), 500); }});
+        nextStepBtn.addEventListener('click', () => { if (currentStep < simulationSteps.length - 1 && currentStep >= 3) executeStep(currentStep + 1); });
+        prevStepBtn.addEventListener('click', () => {
+             if (currentStep >= 4) {
+                const targetStep = currentStep - 1;
+                drawUMLBase();
+                for(let i = 0; i < simulationSteps.length; i++) {
+                    if (i <= targetStep) {
+                        const tempStyle = document.createElement('style'); tempStyle.innerHTML = `* { animation: none !important; transition: none !important; }`; document.head.appendChild(tempStyle);
+                        simulationSteps[i].action();
+                        document.head.removeChild(tempStyle);
+                    }
+                }
+                currentStep = targetStep; updateStepControls();
+            }
+        });
+        
+        detailCheckbox.addEventListener('change', resetSimulation);
+        
         function resetSimulation() {
-            modalOverlay.classList.remove('visible');
-            appInitialView.classList.remove('hidden');
-            appConnectedView.classList.add('hidden');
-            appDataDisplay.innerHTML = '<p>Lade Fotos von PixelCloud...</p>';
-            allowBtn.disabled = false;
-            logOutput.innerHTML = '';
-            log('Simulation neu gestartet. Klicken Sie in der "FotoCollage"-App auf "Mit PixelCloud verbinden", um den OAuth 2.0-Ablauf zu beginnen.');
+            currentStep = -1;
+            authorizationCode = `auth_code_${Math.random().toString(16).slice(2, 12)}`;
+            accessToken = `access_tkn_${Math.random().toString(16).slice(2)}`;
+            
+            modalOverlay.classList.remove('visible'); appInitialView.classList.remove('hidden');
+            appConnectedView.classList.add('hidden'); appDataDisplay.innerHTML = ''; connectBtn.disabled = false;
+            logOutput.innerHTML = ''; stepControls.classList.add('hidden');
+            
+            vizContainer.classList.toggle('hidden', !detailCheckbox.checked);
+            if (detailCheckbox.checked) {
+                drawUMLBase(); setupSimulationSteps(); updateStepControls();
+                log('Detail-Modus aktiv. Klicken Sie auf "Mit Google verbinden", um den Prozess zu starten.');
+            } else {
+                log('Einfacher Modus. Klicken Sie auf "Mit Google verbinden", um den automatischen Ablauf zu starten.');
+            }
         }
 
         resetBtn.addEventListener('click', resetSimulation);
