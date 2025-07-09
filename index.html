@@ -2,6 +2,32 @@
 <html lang="de">
 
 <head>
+    <style id="connect-btn-style">
+        #connect-btn.loading {
+            position: relative;
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        #connect-btn.loading::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 22px;
+            height: 22px;
+            margin-left: -11px;
+            margin-top: -11px;
+            border: 3px solid #90cdf4;
+            border-top: 3px solid #4285F4;
+            border-radius: 50%;
+            animation: connect-btn-spin 0.8s linear infinite;
+            z-index: 2;
+        }
+        @keyframes connect-btn-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OAuth 2.0 Simulator</title>
@@ -96,11 +122,12 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.6);
+            background-color: rgba(0, 0, 0, 0.5);
             display: flex;
-            justify-content: center;
+            justify-content: left;
             align-items: flex-start;
-            padding-top: 5vh;
+            padding-top: 4vh;
+            padding-left: 3vh;
             z-index: 1000;
             opacity: 0;
             pointer-events: none;
@@ -332,11 +359,11 @@
 
         function drawMessage(fromKey, toKey, yPos, label, isReply = false, arrowheadType = 'filled') {
             const fromX = lifelineX[fromKey], toX = lifelineX[toKey];
-            // NEU: Wenn es eine Antwort ist ODER der Typ explizit 'open' ist, nutze die offene Spitze
             const markerId = (isReply || arrowheadType === 'open') ? 'arrowhead-open' : 'arrowhead-filled';
 
             const path = createSVGElement('path', { d: `M ${fromX} ${yPos} L ${toX} ${yPos}`, class: isReply ? 'reply-line' : 'message-line', 'marker-end': `url(#${markerId})` });
-            const text = createSVGElement('text', { x: fromX + (toX - fromX) / 2, y: isReply ? yPos + 20 : yPos - 10, 'text-anchor': 'middle', class: 'message-label' });
+            // NEU: Einheitliche Positionierung über dem Pfeil
+            const text = createSVGElement('text', { x: fromX + (toX - fromX) / 2, y: yPos - 10, 'text-anchor': 'middle', class: 'message-label' });
             text.textContent = label;
             umlSvg.appendChild(path); umlSvg.appendChild(text);
         }
@@ -351,27 +378,31 @@
             const y = { y1: 110, y2: 150, y3: 190, y4: 230, y5: 270, y6: 310, y7: 350, y8: 390 };
             simulationSteps = [
                 {
-                    description: `<strong>Schritt 1: Anfrage.</strong><br>Sie klicken im Client auf "Verbinden".`, action: () => {
-                        drawMessage('user', 'client', y.y1, '1. Klick: verbinden()', false, 'open');
+                    description: `<strong>Schritt 1: Anfrage.</strong><br>Ein Client frägt an, ob ein bestimmter Service verbunden werden soll. Sie klicken im Client auf "Verbinden".`, action: () => {
+                        drawMessage('user', 'client', y.y1, '1. Kalender verbinden()', false, 'open');
                         drawActivationBar('client', y.y1, y.y2);
                     }
                 },
                 {
-                    description: `<strong>Schritt 2: Weiterleitung.</strong><br>Der Client leitet Ihren Browser zum Authorization Server weiter.`, action: () => {
-                        drawMessage('client', 'auth', y.y2, '2. GET /authorize'); modalOverlay.classList.add('visible');
+                    description: `<strong>Schritt 2: Weiterleitung.</strong><br>Der Client macht einen Berechtigungsanfrage am Authorization Server.`, action: () => {
+                        drawMessage('client', 'auth', y.y2, '2. Authorization Request'); modalOverlay.classList.add('visible');
+                        drawActivationBar('auth', y.y2, y.y3);
                     }
                 },
+
                 {
-                    description: `<strong>Schritt 3: Authentifizierung & Zustimmung.</strong><br>Sie geben Ihr Passwort ein und erlauben den Zugriff.`, action: () => {
+                    description: `<strong>Schritt 3: Authentifizierung & Zustimmung.</strong><br>User prüft, die Berechtigungen, gibt ID und Passwort ein und erlaubt den Zugriff.`, action: () => {
                         modalOverlay.classList.remove('visible');
                         drawMessage('user', 'auth', y.y3, '3. Login & Zustimmung', false, 'open');
+                        connectBtn.disabled = true;
+                        connectBtn.classList.add('loading');
+                        log(`Sichtbarer Teil beendet. Steuern Sie nun die unsichtbaren Schritte.`); stepControls.classList.remove('hidden');
                     }
                 },
                 {
-                    description: `<strong>Schritt 4: Autorisierungscode.</strong><br>Der Authorization Server leitet Sie mit einem Code zurück zum Client.<br>Code: <span class="code">${authorizationCode}</span>`, action: () => {
+                    description: `<strong>Schritt 4: Autorisierungscode.</strong><br>Der Authorization Server leitet Sie mit einem kurzfristig gültigen Code zurück zum Client.<br>Code: <span class="code">${authorizationCode}</span>`, action: () => {
                         drawActivationBar('auth', y.y3, y.y4);
                         drawMessage('auth', 'client', y.y4, `4. Authorization Code`, true);
-                        log(`Sichtbarer Teil beendet. Steuern Sie nun die unsichtbaren Schritte.`); stepControls.classList.remove('hidden');
                     }
                 },
                 {
@@ -383,7 +414,7 @@
                 {
                     description: `<strong>Schritt 6: Zugriff auf Ressourcen.</strong><br>Der Client nutzt den Token, um beim Resource Server die Daten anzufordern.`, action: () => {
                         appInitialView.classList.add('hidden'); appConnectedView.classList.remove('hidden'); appDataDisplay.innerHTML = '<p>Lade Kalenderdaten...</p>';
-                        drawActivationBar('resource', y.y7, y.y8); drawMessage('client', 'resource', y.y7, `6 GET /data mit Token`);
+                        drawActivationBar('resource', y.y7, y.y8); drawMessage('client', 'resource', y.y7, `6. GET /data mit Access Token`);
                         setTimeout(() => {
                             drawMessage('resource', 'client', y.y8, '[Kalenderdaten]', true);
                             appDataDisplay.innerHTML = '<h3>Ihre Termine:</h3><ul><li>08:30 - AEuP</li><li>09:30 - ITP</li></ul>'; log('<strong>ABGESCHLOSSEN!</strong>');
@@ -395,12 +426,25 @@
 
         async function runAutomaticSimulation() {
             connectBtn.disabled = true;
-            log('<strong>Schritt 1-3:</strong> Anfrage, Weiterleitung & Zustimmung...'); modalOverlay.classList.add('visible');
+            connectBtn.classList.add('loading');
+            log('<strong>Schritt 1-3:</strong> Anfrage, Weiterleitung & Zustimmung...');
+            modalOverlay.classList.add('visible');
+            // Warten bis allowBtn geklickt wird
+            await new Promise(resolve => {
+                const handler = () => {
+                    allowBtn.removeEventListener('click', handler);
+                    resolve();
+                };
+                allowBtn.addEventListener('click', handler);
+            });
+            modalOverlay.classList.remove('visible');
+            log(`<strong>Schritt 4:</strong> Authorization Code erhalten.`);
+            await new Promise(r => setTimeout(r, 800));
+            log('<strong>Schritt 5:</strong> Code wird gegen Access Token getauscht.');
             await new Promise(r => setTimeout(r, 1200));
-            modalOverlay.classList.remove('visible'); log(`<strong>Schritt 4:</strong> Authorization Code erhalten.`);
-            await new Promise(r => setTimeout(r, 800)); log('<strong>Schritt 5:</strong> Code wird gegen Access Token getauscht.');
-            await new Promise(r => setTimeout(r, 1200)); log('<strong>Schritt 6:</strong> Mit Token werden Daten geladen.');
-            appInitialView.classList.add('hidden'); appConnectedView.classList.remove('hidden');
+            log('<strong>Schritt 6:</strong> Mit Token werden Daten geladen.');
+            appInitialView.classList.add('hidden');
+            appConnectedView.classList.remove('hidden');
             appDataDisplay.innerHTML = '<h3>Ihre Termine:</h3><ul><li>08:30 - AEuP</li><li>09:30 - ITP</li></ul>';
             log('<strong>ABGESCHLOSSEN!</strong><br><br>Das war die einfache Ansicht. Starten Sie neu und aktivieren Sie "Im Detail anzeigen", um den Prozess Schritt für Schritt zu sehen!');
         }
@@ -429,6 +473,7 @@
             if (currentStep >= 4) {
                 const targetStep = currentStep - 1;
                 drawUMLBase();
+                // Replay all steps up to the target step instantly
                 for (let i = 0; i < simulationSteps.length; i++) {
                     if (i <= targetStep) {
                         const tempStyle = document.createElement('style'); tempStyle.innerHTML = `* { animation: none !important; transition: none !important; }`; document.head.appendChild(tempStyle);
@@ -443,6 +488,8 @@
         detailCheckbox.addEventListener('change', resetSimulation);
 
         function resetSimulation() {
+            connectBtn.disabled = false;
+            connectBtn.classList.remove('loading');
             currentStep = -1;
             authorizationCode = `auth_code_${Math.random().toString(16).slice(2, 12)}`;
             accessToken = `access_tkn_${Math.random().toString(16).slice(2)}`;
