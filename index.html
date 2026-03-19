@@ -147,7 +147,7 @@
             border-radius: 8px;
             padding: 20px;
             position: relative;
-            height: 450px;
+            height: 685px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
 
@@ -306,26 +306,44 @@
     </div>
     <div id="modal-overlay">
         <div id="provider-container" class="window">
-            <h1>Anmeldung bei <strong>ByCS</strong></h1>
-            <p>Der <strong>Client "Kalender-Analyse"</strong> möchte auf Ihr ByCS-Konto zugreifen.</p>
-            <p>Berechtigungen (Scopes):</p>
-            <ul style="list-style-type: '✅ '; padding-left: 20px;">
-                <li>Ihre Kalender lesen</li>
-                <li>Ihre E-Mail-Adresse sehen</li>
-            </ul>
-            <p><small>Der Client wird Ihr Passwort <strong>niemals</strong> sehen.</small></p><button
-                id="allow-btn">Zulassen</button>
+            <div id="modal-login-view">
+                <h1>Anmeldung bei <strong>ByCS</strong></h1>
+                <p>Melden Sie sich an, um fortzufahren.</p>
+                <div style="margin: 15px 0;">
+                    <label style="display:block; font-size:14px; margin-bottom:4px; color:#555;">Benutzername</label>
+                    <input id="fake-user" type="text" readonly style="width:100%; padding:10px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box; font-size:15px; background:#f9f9f9;">
+                </div>
+                <div style="margin: 15px 0;">
+                    <label style="display:block; font-size:14px; margin-bottom:4px; color:#555;">Passwort</label>
+                    <input id="fake-pass" type="password" readonly style="width:100%; padding:10px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box; font-size:15px; background:#f9f9f9;">
+                </div>
+                <button id="login-btn">Anmelden</button>
+                <p><small>Der Client wird Ihr Passwort <strong>niemals</strong> sehen.</small></p>
+            </div>
+            <div id="modal-consent-view" class="hidden">
+                <h1>Zugriff erlauben?</h1>
+                <p>Der <strong>Client "Kalender-Analyse"</strong> möchte auf Ihr ByCS-Konto zugreifen.</p>
+                <p>Angeforderte Berechtigungen (Scopes):</p>
+                <ul style="list-style-type: '✅ '; padding-left: 20px;">
+                    <li>Ihre Kalender lesen</li>
+                    <li>Ihre E-Mail-Adresse sehen</li>
+                </ul>
+                <button id="allow-btn">Zulassen</button>
+            </div>
         </div>
     </div>
     <button id="reset-btn">Simulation zurücksetzen</button>
     <script>
         const getEl = (id) => document.getElementById(id);
         const modalOverlay = getEl('modal-overlay'), logOutput = getEl('log-output'), connectBtn = getEl('connect-btn'),
-            allowBtn = getEl('allow-btn'), resetBtn = getEl('reset-btn'), appInitialView = getEl('app-initial-view'),
-            appConnectedView = getEl('app-connected-view'), appDataDisplay = getEl('app-data-display'),
-            detailCheckbox = getEl('detail-checkbox'), vizContainer = getEl('visualization-container'),
-            umlSvg = getEl('uml-svg'), stepControls = getEl('step-controls'),
-            prevStepBtn = getEl('prev-step-btn'), nextStepBtn = getEl('next-step-btn');
+            allowBtn = getEl('allow-btn'), loginBtn = getEl('login-btn'), resetBtn = getEl('reset-btn'),
+            appInitialView = getEl('app-initial-view'), appConnectedView = getEl('app-connected-view'),
+            appDataDisplay = getEl('app-data-display'), detailCheckbox = getEl('detail-checkbox'),
+            vizContainer = getEl('visualization-container'), umlSvg = getEl('uml-svg'),
+            stepControls = getEl('step-controls'), prevStepBtn = getEl('prev-step-btn'),
+            nextStepBtn = getEl('next-step-btn'), modalLoginView = getEl('modal-login-view'),
+            modalConsentView = getEl('modal-consent-view'), fakeUser = getEl('fake-user'),
+            fakePass = getEl('fake-pass');
 
         let currentStep = -1, simulationSteps = [], lifelineX = {}, authorizationCode, accessToken;
 
@@ -368,57 +386,106 @@
             umlSvg.appendChild(path); umlSvg.appendChild(text);
         }
 
+        function drawSelfMessage(key, yPos, label) {
+            const x = lifelineX[key];
+            const w = 40, h = 25;
+            const path = createSVGElement('path', {
+                d: `M ${x} ${yPos} L ${x + w} ${yPos} L ${x + w} ${yPos + h} L ${x} ${yPos + h}`,
+                class: 'message-line', 'marker-end': 'url(#arrowhead-filled)'
+            });
+            umlSvg.appendChild(path);
+            const lines = label.split('\n');
+            lines.forEach((line, i) => {
+                const text = createSVGElement('text', {
+                    x: x + w + 5, y: yPos + h / 2 + 4 + (i * 16) - ((lines.length - 1) * 8),
+                    'text-anchor': 'start', class: 'message-label'
+                });
+                text.textContent = line;
+                umlSvg.appendChild(text);
+            });
+        }
+
         function drawActivationBar(onKey, startY, endY) {
             if (lifelineX[onKey]) umlSvg.appendChild(createSVGElement('rect', { class: 'activation-bar', x: lifelineX[onKey] - 5, y: startY, width: 10, height: endY - startY }));
         }
 
         function log(message) { logOutput.innerHTML += `<div class="log-entry">${message}</div>`; logOutput.scrollTop = logOutput.scrollHeight; }
 
+        function simulateTyping(input, text, cb) {
+            let i = 0;
+            const interval = setInterval(() => {
+                input.value = text.slice(0, ++i);
+                if (i >= text.length) { clearInterval(interval); if (cb) cb(); }
+            }, 60);
+        }
+
         function setupSimulationSteps() {
-            const y = { y1: 110, y2: 150, y3: 190, y4: 230, y5: 270, y6: 310, y7: 350, y8: 390 };
+            const y = { y1: 100, y2: 135, y3: 170, y4: 210, y5: 240, y6: 280, y7: 315, y8: 345, y9: 400, y10: 430, y11: 465, y12: 500, y13: 535, y14: 570, y15: 605, y16: 640 };
             simulationSteps = [
                 {
-                    description: `<strong>Schritt 1: Anfrage.</strong><br>Ein Client frägt an, ob ein bestimmter Service verbunden werden soll. Sie klicken im Client auf "Verbinden".`, action: () => {
+                    description: `<strong>Schritt 1: Anfrage.</strong><br>Sie klicken im Client auf "Verbinden", um den OAuth-Prozess zu starten.`, action: () => {
                         drawMessage('user', 'client', y.y1, '1. Kalender verbinden()', false, 'open');
                         drawActivationBar('client', y.y1, y.y2);
                     }
                 },
                 {
-                    description: `<strong>Schritt 2: Weiterleitung.</strong><br>Der Client macht einen Berechtigungsanfrage am Authorization Server.`, action: () => {
-                        drawMessage('client', 'auth', y.y2, '2. Authorization Request'); modalOverlay.classList.add('visible');
-                        drawActivationBar('auth', y.y2, y.y3);
+                    description: `<strong>Schritt 2–3: Redirect zum Auth Server.</strong><br>Der Client leitet Sie per HTTP-Redirect (302) zum Authorization Server weiter — mit <code>client_id</code>, <code>redirect_uri</code>, <code>scope</code> und <code>state</code> (CSRF-Schutz). Ihr Browser folgt dem Redirect automatisch (Authorization Request).`, action: () => {
+                        drawMessage('client', 'user', y.y2, '2. Redirect (302)', true);
+                        drawMessage('user', 'auth', y.y3, '3. Authorization Request (mit state)', false, 'open');
+                        drawActivationBar('auth', y.y3, y.y6);
+                        modalLoginView.classList.remove('hidden'); modalConsentView.classList.add('hidden');
+                        fakeUser.value = ''; fakePass.value = '';
+                        modalOverlay.classList.add('visible');
+                        simulateTyping(fakeUser, 'max.mustermann', () => {
+                            simulateTyping(fakePass, 'passwort123');
+                        });
                     }
                 },
-
                 {
-                    description: `<strong>Schritt 3: Authentifizierung & Zustimmung.</strong><br>User prüft, die Berechtigungen, gibt ID und Passwort ein und erlaubt den Zugriff.`, action: () => {
+                    description: `<strong>Schritt 4: Authentifizierung.</strong><br>Sie geben Ihre Zugangsdaten beim Auth Server ein und klicken "Anmelden". Der Auth Server prüft die Credentials intern. Der Client sieht Ihr Passwort niemals.`, action: () => {
+                        modalLoginView.classList.add('hidden'); modalConsentView.classList.remove('hidden');
+                        drawMessage('user', 'auth', y.y4, '4. Login', false, 'open');
+                        drawSelfMessage('auth', y.y5, 'Credentials prüfen');
+                    }
+                },
+                {
+                    description: `<strong>Schritt 4 (Forts.): Zustimmung.</strong><br>Nach erfolgreicher Anmeldung prüfen Sie die angeforderten Berechtigungen (Scopes) und erlauben den Zugriff.`, action: () => {
                         modalOverlay.classList.remove('visible');
-                        drawMessage('user', 'auth', y.y3, '3. Login & Zustimmung', false, 'open');
                         connectBtn.disabled = true;
                         connectBtn.classList.add('loading');
                         log(`Sichtbarer Teil beendet. Steuern Sie nun die unsichtbaren Schritte.`); stepControls.classList.remove('hidden');
                     }
                 },
                 {
-                    description: `<strong>Schritt 4: Autorisierungscode.</strong><br>Der Authorization Server leitet Sie mit einem kurzfristig gültigen Code zurück zum Client.<br>Code: <span class="code">${authorizationCode}</span>`, action: () => {
-                        drawActivationBar('auth', y.y3, y.y4);
-                        drawMessage('auth', 'client', y.y4, `4. Authorization Code`, true);
+                    description: `<strong>Schritt 5–6: Redirect mit Authorization Code.</strong><br>Der Auth Server leitet Sie per Redirect zurück zum Client (<code>redirect_uri</code>) — mit einem kurzlebigen Authorization Code und dem <code>state</code>-Parameter. Ihr Browser folgt dem Redirect automatisch. Der Client validiert den <code>state</code> gegen den ursprünglich gesendeten Wert (<em>state validieren</em>).<br>Code: <span class="code">${authorizationCode}</span>`, action: () => {
+                        drawMessage('auth', 'user', y.y6, '5. Redirect mit Code + state', true);
+                        drawMessage('user', 'client', y.y7, '6. Code an redirect_uri', false, 'open');
+                        drawSelfMessage('client', y.y8, 'state validieren');
+                        drawActivationBar('client', y.y7, y.y12);
                     }
                 },
                 {
-                    description: `<strong>Schritt 5: Austausch im Hintergrund.</strong><br>Der Client sendet den Code an den Auth. Server und erhält einen Access Token.<br>Token: <span class="token">${accessToken}</span>`, action: () => {
-                        drawActivationBar('auth', y.y5, y.y6); drawMessage('client', 'auth', y.y5, `5. Code anfordern`);
-                        setTimeout(() => drawMessage('auth', 'client', y.y6, `Access Token`, true), 800);
+                    description: `<strong>Schritt 7: Token Exchange (Backend).</strong><br>Der Client sendet den Code zusammen mit seinem <code>client_secret</code> an den Auth Server (Server-zu-Server). Der Auth Server validiert Code und Secret intern (<em>Code + Secret validieren</em>).<br>Token: <span class="token">${accessToken}</span>`, action: () => {
+                        drawMessage('client', 'auth', y.y9, '7. Token Request (Code + Secret)');
+                        drawActivationBar('auth', y.y9, y.y11);
+                        drawSelfMessage('auth', y.y10, 'Code + Secret validieren');
+                        setTimeout(() => drawMessage('auth', 'client', y.y11, 'Access Token', true), 800);
                     }
                 },
                 {
-                    description: `<strong>Schritt 6: Zugriff auf Ressourcen.</strong><br>Der Client nutzt den Token, um beim Resource Server die Daten anzufordern.`, action: () => {
+                    description: `<strong>Schritt 8–9: Zugriff auf Ressourcen.</strong><br>Der Client sendet den Access Token an den Resource Server. Dieser validiert den Token per <em>Token Introspection</em> (RFC 7662) beim Authorization Server — da der Token opak ist, kann er ihn nicht selbst prüfen.`, action: () => {
                         appInitialView.classList.add('hidden'); appConnectedView.classList.remove('hidden'); appDataDisplay.innerHTML = '<p>Lade Kalenderdaten...</p>';
-                        drawActivationBar('resource', y.y7, y.y8); drawMessage('client', 'resource', y.y7, `6. GET /data mit Access Token`);
+                        drawMessage('client', 'resource', y.y12, '8. GET /data mit Access Token');
+                        drawActivationBar('resource', y.y12, y.y16);
+                        drawMessage('resource', 'auth', y.y13, '9. Token Introspection');
+                        drawActivationBar('auth', y.y13, y.y14);
                         setTimeout(() => {
-                            drawMessage('resource', 'client', y.y8, '[Kalenderdaten]', true);
+                            drawMessage('auth', 'resource', y.y14, 'active: true + Scopes', true);
+                        }, 400);
+                        setTimeout(() => {
+                            drawMessage('resource', 'client', y.y16, '[Kalenderdaten]', true);
                             appDataDisplay.innerHTML = '<h3>Ihre Termine:</h3><ul><li>08:30 - AEuP</li><li>09:30 - ITP</li></ul>'; log('<strong>ABGESCHLOSSEN!</strong>');
-                        }, 800);
+                        }, 1000);
                     }
                 }
             ];
@@ -427,22 +494,29 @@
         async function runAutomaticSimulation() {
             connectBtn.disabled = true;
             connectBtn.classList.add('loading');
-            log('<strong>Schritt 1-3:</strong> Anfrage, Weiterleitung & Zustimmung...');
+            log('<strong>Schritt 1–3:</strong> Anfrage & Redirect zum Authorization Server (mit client_id, scope, state)...');
+            modalLoginView.classList.remove('hidden'); modalConsentView.classList.add('hidden');
+            fakeUser.value = ''; fakePass.value = '';
             modalOverlay.classList.add('visible');
-            // Warten bis allowBtn geklickt wird
+            simulateTyping(fakeUser, 'max.mustermann', () => { simulateTyping(fakePass, 'passwort123'); });
             await new Promise(resolve => {
-                const handler = () => {
-                    allowBtn.removeEventListener('click', handler);
-                    resolve();
-                };
+                const handler = () => { loginBtn.removeEventListener('click', handler); resolve(); };
+                loginBtn.addEventListener('click', handler);
+            });
+            modalLoginView.classList.add('hidden'); modalConsentView.classList.remove('hidden');
+            log('<strong>Schritt 4:</strong> Credentials geprüft. Zustimmung angefordert...');
+            await new Promise(resolve => {
+                const handler = () => { allowBtn.removeEventListener('click', handler); resolve(); };
                 allowBtn.addEventListener('click', handler);
             });
             modalOverlay.classList.remove('visible');
-            log(`<strong>Schritt 4:</strong> Authorization Code erhalten.`);
+            log('<strong>Schritt 4 (Forts.):</strong> Zustimmung erteilt.');
             await new Promise(r => setTimeout(r, 800));
-            log('<strong>Schritt 5:</strong> Code wird gegen Access Token getauscht.');
+            log(`<strong>Schritt 5–6:</strong> Redirect zurück zum Client mit Authorization Code (+ state).`);
+            await new Promise(r => setTimeout(r, 800));
+            log('<strong>Schritt 7:</strong> Token Exchange — Code + client_secret werden im Backend gegen Access Token getauscht.');
             await new Promise(r => setTimeout(r, 1200));
-            log('<strong>Schritt 6:</strong> Mit Token werden Daten geladen.');
+            log('<strong>Schritt 8–9:</strong> Mit Access Token werden Daten vom Resource Server geladen. Token wird per Introspection beim Auth Server validiert.');
             appInitialView.classList.add('hidden');
             appConnectedView.classList.remove('hidden');
             appDataDisplay.innerHTML = '<h3>Ihre Termine:</h3><ul><li>08:30 - AEuP</li><li>09:30 - ITP</li></ul>';
@@ -463,14 +537,15 @@
         }
 
         connectBtn.addEventListener('click', () => {
-            if (detailCheckbox.checked) { if (currentStep === -1) { executeStep(0); setTimeout(() => executeStep(1), 500); } }
+            if (detailCheckbox.checked) { if (currentStep === -1) { executeStep(0); setTimeout(() => executeStep(1), 800); } }
             else { runAutomaticSimulation(); }
         });
 
-        allowBtn.addEventListener('click', () => { if (detailCheckbox.checked && currentStep === 1) { executeStep(2); setTimeout(() => executeStep(3), 500); } });
-        nextStepBtn.addEventListener('click', () => { if (currentStep < simulationSteps.length - 1 && currentStep >= 3) executeStep(currentStep + 1); });
+        loginBtn.addEventListener('click', () => { if (detailCheckbox.checked && currentStep === 1) executeStep(2); });
+        allowBtn.addEventListener('click', () => { if (detailCheckbox.checked && currentStep === 2) { executeStep(3); setTimeout(() => executeStep(4), 500); } });
+        nextStepBtn.addEventListener('click', () => { if (currentStep < simulationSteps.length - 1 && currentStep >= 4) executeStep(currentStep + 1); });
         prevStepBtn.addEventListener('click', () => {
-            if (currentStep >= 4) {
+            if (currentStep >= 5) {
                 const targetStep = currentStep - 1;
                 drawUMLBase();
                 // Replay all steps up to the target step instantly
@@ -497,6 +572,8 @@
             modalOverlay.classList.remove('visible'); appInitialView.classList.remove('hidden');
             appConnectedView.classList.add('hidden'); appDataDisplay.innerHTML = ''; connectBtn.disabled = false;
             logOutput.innerHTML = ''; stepControls.classList.add('hidden');
+            modalLoginView.classList.remove('hidden'); modalConsentView.classList.add('hidden');
+            fakeUser.value = ''; fakePass.value = '';
 
             vizContainer.classList.toggle('hidden', !detailCheckbox.checked);
             if (detailCheckbox.checked) {
