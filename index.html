@@ -147,7 +147,7 @@
             border-radius: 8px;
             padding: 20px;
             position: relative;
-            height: 685px;
+            height: 755px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
 
@@ -386,11 +386,11 @@
             umlSvg.appendChild(path); umlSvg.appendChild(text);
         }
 
-        function drawSelfMessage(key, yPos, label) {
+        function drawSelfMessage(key, yPos, label, returnOffset = 0) {
             const x = lifelineX[key];
             const w = 40, h = 25;
             const path = createSVGElement('path', {
-                d: `M ${x} ${yPos} L ${x + w} ${yPos} L ${x + w} ${yPos + h} L ${x} ${yPos + h}`,
+                d: `M ${x} ${yPos} L ${x + w} ${yPos} L ${x + w} ${yPos + h} L ${x + returnOffset} ${yPos + h}`,
                 class: 'message-line', 'marker-end': 'url(#arrowhead-filled)'
             });
             umlSvg.appendChild(path);
@@ -405,8 +405,8 @@
             });
         }
 
-        function drawActivationBar(onKey, startY, endY) {
-            if (lifelineX[onKey]) umlSvg.appendChild(createSVGElement('rect', { class: 'activation-bar', x: lifelineX[onKey] - 5, y: startY, width: 10, height: endY - startY }));
+        function drawActivationBar(onKey, startY, endY, offset = 0) {
+            if (lifelineX[onKey]) umlSvg.appendChild(createSVGElement('rect', { class: 'activation-bar', x: lifelineX[onKey] - 5 + offset, y: startY, width: 10, height: endY - startY }));
         }
 
         function log(message) { logOutput.innerHTML += `<div class="log-entry">${message}</div>`; logOutput.scrollTop = logOutput.scrollHeight; }
@@ -420,18 +420,18 @@
         }
 
         function setupSimulationSteps() {
-            const y = { y1: 100, y2: 135, y3: 170, y4: 210, y5: 240, y6: 280, y7: 315, y8: 345, y9: 400, y10: 430, y11: 465, y12: 500, y13: 535, y14: 570, y15: 605, y16: 640 };
+            const y = { y1: 100, y2: 135, y3: 170, y4: 210, y5: 240, y6: 305, y7: 340, y8: 370, y9: 430, y10: 460, y11: 525, y12: 560, y13: 595, y14: 630, y15: 665, y16: 700 };
             simulationSteps = [
                 {
                     description: `<strong>Schritt 1: Anfrage.</strong><br>Sie klicken im Client auf "Verbinden", um den OAuth-Prozess zu starten.`, action: () => {
-                        drawMessage('user', 'client', y.y1, '1. Kalender verbinden()', false, 'open');
+                        drawMessage('user', 'client', y.y1, '1. Kalender verbinden()');
                         drawActivationBar('client', y.y1, y.y2);
                     }
                 },
                 {
                     description: `<strong>Schritt 2–3: Redirect zum Auth Server.</strong><br>Der Client leitet Sie per HTTP-Redirect (302) zum Authorization Server weiter — mit <code>client_id</code>, <code>redirect_uri</code>, <code>scope</code> und <code>state</code> (CSRF-Schutz). Ihr Browser folgt dem Redirect automatisch (Authorization Request).`, action: () => {
                         drawMessage('client', 'user', y.y2, '2. Redirect (302)', true);
-                        drawMessage('user', 'auth', y.y3, '3. Authorization Request (mit state)', false, 'open');
+                        drawMessage('user', 'auth', y.y3, '3. Authorization Request (mit state)');
                         drawActivationBar('auth', y.y3, y.y6);
                         modalLoginView.classList.remove('hidden'); modalConsentView.classList.add('hidden');
                         fakeUser.value = ''; fakePass.value = '';
@@ -444,8 +444,9 @@
                 {
                     description: `<strong>Schritt 4: Authentifizierung.</strong><br>Sie geben Ihre Zugangsdaten beim Auth Server ein und klicken "Anmelden". Der Auth Server prüft die Credentials intern. Der Client sieht Ihr Passwort niemals.`, action: () => {
                         modalLoginView.classList.add('hidden'); modalConsentView.classList.remove('hidden');
-                        drawMessage('user', 'auth', y.y4, '4. Login', false, 'open');
-                        drawSelfMessage('auth', y.y5, 'Credentials prüfen');
+                        drawMessage('user', 'auth', y.y4, '4. Login');
+                        drawSelfMessage('auth', y.y5, 'Credentials prüfen', 15);
+                        drawActivationBar('auth', y.y5 + 25, y.y5 + 50, 10);
                     }
                 },
                 {
@@ -459,8 +460,9 @@
                 {
                     description: `<strong>Schritt 5–6: Redirect mit Authorization Code.</strong><br>Der Auth Server leitet Sie per Redirect zurück zum Client (<code>redirect_uri</code>) — mit einem kurzlebigen Authorization Code und dem <code>state</code>-Parameter. Ihr Browser folgt dem Redirect automatisch. Der Client validiert den <code>state</code> gegen den ursprünglich gesendeten Wert (<em>state validieren</em>).<br>Code: <span class="code">${authorizationCode}</span>`, action: () => {
                         drawMessage('auth', 'user', y.y6, '5. Redirect mit Code + state', true);
-                        drawMessage('user', 'client', y.y7, '6. Code an redirect_uri', false, 'open');
-                        drawSelfMessage('client', y.y8, 'state validieren');
+                        drawMessage('user', 'client', y.y7, '6. Code an redirect_uri');
+                        drawSelfMessage('client', y.y8, 'state validieren', 15);
+                        drawActivationBar('client', y.y8 + 25, y.y8 + 50, 10);
                         drawActivationBar('client', y.y7, y.y12);
                     }
                 },
@@ -468,7 +470,8 @@
                     description: `<strong>Schritt 7: Token Exchange (Backend).</strong><br>Der Client sendet den Code zusammen mit seinem <code>client_secret</code> an den Auth Server (Server-zu-Server). Der Auth Server validiert Code und Secret intern (<em>Code + Secret validieren</em>).<br>Token: <span class="token">${accessToken}</span>`, action: () => {
                         drawMessage('client', 'auth', y.y9, '7. Token Request (Code + Secret)');
                         drawActivationBar('auth', y.y9, y.y11);
-                        drawSelfMessage('auth', y.y10, 'Code + Secret validieren');
+                        drawSelfMessage('auth', y.y10, 'Code + Secret validieren', 15);
+                        drawActivationBar('auth', y.y10 + 25, y.y10 + 50, 10);
                         setTimeout(() => drawMessage('auth', 'client', y.y11, 'Access Token', true), 800);
                     }
                 },
