@@ -1,0 +1,6 @@
+.claude/.headroom_wrap_marker.json
+.tokensave/branch-meta.json
+.tokensave/config.json
+.tokensave/tokensave.db-wal
+.tokensave/tokensave.db
+.tokensave/tokensave.db-shm
