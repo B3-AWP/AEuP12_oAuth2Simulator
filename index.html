@@ -147,7 +147,7 @@
             border-radius: 8px;
             padding: 20px;
             position: relative;
-            height: 755px;
+            height: 785px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
 
@@ -298,7 +298,7 @@
         </div>
     </div>
     <div id="visualization-container" class="hidden">
-        <div id="lifeline-box-user" class="lifeline-box">Resource Owner<br>(Sie)</div>
+        <div id="lifeline-box-user" class="lifeline-box"><span style="font-weight:normal; font-size:12px;">«actor»</span><br>Resource Owner<br>(Sie)</div>
         <div id="lifeline-box-client" class="lifeline-box">Client<br>("Kalender-Analyse"-App)</div>
         <div id="lifeline-box-auth" class="lifeline-box">Authorization Server<br>(ByCS Login)</div>
         <div id="lifeline-box-resource" class="lifeline-box">Resource Server<br>(ByCS Kalender API)</div>
@@ -420,7 +420,7 @@
         }
 
         function setupSimulationSteps() {
-            const y = { y1: 100, y2: 135, y3: 170, y4: 210, y5: 240, y6: 305, y7: 340, y8: 370, y9: 430, y10: 460, y11: 525, y12: 560, y13: 595, y14: 630, y15: 665, y16: 700 };
+            const y = { y1: 100, y2: 135, y3: 170, y4: 210, y5: 240, y5b: 300, y6: 335, y7: 370, y8: 400, y9: 460, y10: 490, y11: 555, y12: 590, y13: 625, y14: 660, y15: 695, y16: 730 };
             simulationSteps = [
                 {
                     description: `<strong>Schritt 1: Anfrage.</strong><br>Sie klicken im Client auf "Verbinden", um den OAuth-Prozess zu starten.`, action: () => {
@@ -451,6 +451,7 @@
                 },
                 {
                     description: `<strong>Schritt 4 (Forts.): Zustimmung.</strong><br>Nach erfolgreicher Anmeldung prüfen Sie die angeforderten Berechtigungen (Scopes) und erlauben den Zugriff.`, action: () => {
+                        drawMessage('user', 'auth', y.y5b, '4b. Zustimmung erteilen');
                         modalOverlay.classList.remove('visible');
                         connectBtn.disabled = true;
                         connectBtn.classList.add('loading');
@@ -463,7 +464,7 @@
                         drawMessage('user', 'client', y.y7, '6. Code an redirect_uri');
                         drawSelfMessage('client', y.y8, 'state validieren', 15);
                         drawActivationBar('client', y.y8 + 25, y.y8 + 50, 10);
-                        drawActivationBar('client', y.y7, y.y12);
+                        drawActivationBar('client', y.y7, y.y16);
                     }
                 },
                 {
