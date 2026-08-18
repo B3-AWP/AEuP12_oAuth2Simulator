@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <style id="connect-btn-style">
+        #connect-btn.loading {
+            position: relative;
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        #connect-btn.loading::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 22px;
+            height: 22px;
+            margin-left: -11px;
+            margin-top: -11px;
+            border: 3px solid #90cdf4;
+            border-top: 3px solid #4285F4;
+            border-radius: 50%;
+            animation: connect-btn-spin 0.8s linear infinite;
+            z-index: 2;
+        }
+        @keyframes connect-btn-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenID Connect Simulator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .window {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            width: 450px;
+            min-height: 400px;
+            border: 1px solid #ddd;
+        }
+
+        #log-container {
+            background-color: #2d3748;
+            color: #f7fafc;
+            font-family: "Courier New", Courier, monospace;
+            height: 400px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #4A5568;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+
+        #log-output {
+            flex-grow: 1;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-size: 14px;
+        }
+
+        .log-entry {
+            padding: 8px;
+            border-bottom: 1px dashed #4A5568;
+        }
+
+        .log-entry strong {
+            color: #90CDF4;
+        }
+
+        #step-controls {
+            display: flex;
+            gap: 10px;
+            padding: 10px 0 0;
+            border-top: 1px solid #4A5568;
+        }
+
+        #step-controls button {
+            width: 50%;
+            margin: 0;
+            font-size: 14px;
+            padding: 8px;
+            background-color: #4A5568;
+        }
+
+        #step-controls button:disabled {
+            background-color: #2d3748;
+            color: #718096;
+            cursor: not-allowed;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: left;
+            align-items: flex-start;
+            padding-top: 4vh;
+            padding-left: 3vh;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        #modal-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #visualization-container {
+            width: 100%;
+            max-width: 920px;
+            margin: 20px auto 0;
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 20px;
+            position: relative;
+            height: 780px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .lifeline-box {
+            position: absolute;
+            width: 22%;
+            border: 2px solid #333;
+            background-color: #fff;
+            text-align: center;
+            padding: 10px;
+            font-weight: bold;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+
+        #lifeline-box-user {
+            top: 10px;
+            left: 5%;
+        }
+
+        #lifeline-box-client {
+            top: 10px;
+            left: 27.5%;
+        }
+
+        #lifeline-box-auth {
+            top: 10px;
+            left: 50%;
+        }
+
+        #lifeline-box-resource {
+            top: 10px;
+            right: 5%;
+        }
+
+        #uml-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .lifeline {
+            stroke: #333;
+            stroke-width: 1;
+            stroke-dasharray: 5 5;
+        }
+
+        .message-line,
+        .reply-line {
+            stroke: #333;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        .reply-line {
+            stroke-dasharray: 8 4;
+        }
+
+        .message-label {
+            font-family: "Courier New", Courier, monospace;
+            font-size: 14px;
+            fill: #2c5282;
+            font-weight: bold;
+            opacity: 0;
+            animation: fade-in-label 0.5s ease-out 0.4s forwards;
+        }
+
+        .activation-bar {
+            fill: #4285F4;
+            stroke: #357ae8;
+            stroke-width: 1;
+            opacity: 0;
+            animation: fade-in-label 0.3s forwards;
+        }
+
+        @keyframes fade-in-label {
+            to {
+                opacity: 1;
+            }
+        }
+
+        button {
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #reset-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: auto;
+            background-color: #db4437;
+            z-index: 1001;
+            padding: 15px 25px;
+            font-size: 16px;
+            font-weight: bold;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s, background-color 0.2s;
+        }
+
+        #reset-btn:hover {
+            background-color: #c5372c;
+            transform: translateY(-2px);
+        }
+
+        .token {
+            color: #68D391;
+            word-break: break-all;
+        }
+
+        .code {
+            color: #F6E05E;
+            word-break: break-all;
+        }
+
+        .id-token {
+            color: #FC8181;
+            word-break: break-all;
+        }
+
+        .oidc-badge {
+            display: inline-block;
+            background: #805AD5;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 5px;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div id="app-container" class="window">
+            <div id="app-initial-view">
+                <h1>Willkommen bei der "Kalender-Analyse"-App</h1>
+                <p><strong>Resource Owner (Sie):</strong> Sie möchten sich mit Ihrem ByCS-Konto anmelden und der App Zugriff auf Ihr Profil und Ihre Kalender geben.</p>
+                <p><small>Diese App nutzt <strong>OpenID Connect</strong> <span class="oidc-badge">OIDC</span> — eine Identitätsschicht auf OAuth 2.0.</small></p>
+                <button id="connect-btn">Mit ByCS anmelden</button>
+            </div>
+            <div id="app-connected-view" class="hidden">
+                <h2>Angemeldet!</h2>
+                <p>Die Relying Party hat Ihre Identität verifiziert und kann nun auf Ihre Daten zugreifen.</p>
+                <div id="app-data-display"></div>
+            </div>
+        </div>
+        <div id="log-container" class="window">
+            <div class="log-header">
+                <h2>OpenID Connect Ablauf</h2><label class="detail-toggle"><input type="checkbox"
+                        id="detail-checkbox"> Im Detail anzeigen</label>
+            </div>
+            <div id="log-output"></div>
+            <div id="step-controls" class="hidden"><button id="prev-step-btn" disabled>Vorheriger
+                    Schritt</button><button id="next-step-btn" disabled>Nächster Schritt</button></div>
+        </div>
+    </div>
+    <div id="visualization-container" class="hidden">
+        <div id="lifeline-box-user" class="lifeline-box"><span style="font-weight:normal; font-size:12px;">«actor»</span><br>Resource Owner<br>(Sie)</div>
+        <div id="lifeline-box-client" class="lifeline-box">Relying Party<br>("Kalender-Analyse"-App)</div>
+        <div id="lifeline-box-auth" class="lifeline-box">OpenID Provider<br>(ByCS Login)</div>
+        <div id="lifeline-box-resource" class="lifeline-box">UserInfo Endpoint<br>(Teil des OpenID Providers)</div>
+        <svg id="uml-svg"></svg>
+    </div>
+    <div id="modal-overlay">
+        <div id="provider-container" class="window">
+            <div id="modal-login-view">
+                <h1>Anmeldung bei <strong>ByCS</strong></h1>
+                <p>Melden Sie sich an, um fortzufahren.</p>
+                <div style="margin: 15px 0;">
+                    <label style="display:block; font-size:14px; margin-bottom:4px; color:#555;">Benutzername</label>
+                    <input id="fake-user" type="text" readonly style="width:100%; padding:10px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box; font-size:15px; background:#f9f9f9;">
+                </div>
+                <div style="margin: 15px 0;">
+                    <label style="display:block; font-size:14px; margin-bottom:4px; color:#555;">Passwort</label>
+                    <input id="fake-pass" type="password" readonly style="width:100%; padding:10px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box; font-size:15px; background:#f9f9f9;">
+                </div>
+                <button id="login-btn">Anmelden</button>
+                <p><small>Die Relying Party wird Ihr Passwort <strong>niemals</strong> sehen.</small></p>
+            </div>
+            <div id="modal-consent-view" class="hidden">
+                <h1>Zugriff erlauben?</h1>
+                <p>Die <strong>Relying Party "Kalender-Analyse"</strong> möchte auf Ihr ByCS-Konto zugreifen.</p>
+                <p>Angeforderte Berechtigungen (Scopes):</p>
+                <ul style="list-style-type: '✅ '; padding-left: 20px;">
+                    <li><strong>openid</strong> — Ihre Identität verifizieren</li>
+                    <li><strong>profile</strong> — Ihren Namen und Profilinfos lesen</li>
+                    <li><strong>email</strong> — Ihre E-Mail-Adresse sehen</li>
+                </ul>
+                <button id="allow-btn">Zulassen</button>
+            </div>
+        </div>
+    </div>
+    <button id="reset-btn">Simulation zurücksetzen</button>
+    <script>
+        const getEl = (id) => document.getElementById(id);
+        const modalOverlay = getEl('modal-overlay'), logOutput = getEl('log-output'), connectBtn = getEl('connect-btn'),
+            allowBtn = getEl('allow-btn'), loginBtn = getEl('login-btn'), resetBtn = getEl('reset-btn'),
+            appInitialView = getEl('app-initial-view'), appConnectedView = getEl('app-connected-view'),
+            appDataDisplay = getEl('app-data-display'), detailCheckbox = getEl('detail-checkbox'),
+            vizContainer = getEl('visualization-container'), umlSvg = getEl('uml-svg'),
+            stepControls = getEl('step-controls'), prevStepBtn = getEl('prev-step-btn'),
+            nextStepBtn = getEl('next-step-btn'), modalLoginView = getEl('modal-login-view'),
+            modalConsentView = getEl('modal-consent-view'), fakeUser = getEl('fake-user'),
+            fakePass = getEl('fake-pass');
+
+        let currentStep = -1, simulationSteps = [], lifelineX = {}, authorizationCode, accessToken, idToken, nonce;
+
+        function createSVGElement(tag, attributes) {
+            const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+            for (const key in attributes) { el.setAttribute(key, attributes[key]); }
+            return el;
+        }
+
+        function drawUMLBase() {
+            umlSvg.innerHTML = '';
+            const boxes = { user: getEl('lifeline-box-user'), client: getEl('lifeline-box-client'), auth: getEl('lifeline-box-auth'), resource: getEl('lifeline-box-resource') };
+            const startY = boxes.user.offsetTop + boxes.user.offsetHeight;
+            const endY = vizContainer.offsetHeight - 20;
+            for (const key in boxes) {
+                lifelineX[key] = boxes[key].offsetLeft + boxes[key].offsetWidth / 2;
+                umlSvg.appendChild(createSVGElement('line', { class: 'lifeline', x1: lifelineX[key], y1: startY, x2: lifelineX[key], y2: endY }));
+            }
+
+            const defs = createSVGElement('defs');
+            const filledMarker = createSVGElement('marker', { id: 'arrowhead-filled', markerWidth: 10, markerHeight: 7, refX: 8, refY: 3.5, orient: 'auto', fill: '#333' });
+            filledMarker.appendChild(createSVGElement('polygon', { points: '0 0, 10 3.5, 0 7' }));
+
+            const openMarker = createSVGElement('marker', { id: 'arrowhead-open', markerWidth: 10, markerHeight: 7, refX: 8, refY: 3.5, orient: 'auto', fill: 'none', stroke: '#333', 'stroke-width': 2 });
+            openMarker.appendChild(createSVGElement('polyline', { points: '0,0 10,3.5 0,7' }));
+
+            defs.appendChild(filledMarker);
+            defs.appendChild(openMarker);
+            umlSvg.appendChild(defs);
+        }
+
+        function drawMessage(fromKey, toKey, yPos, label, isReply = false, arrowheadType = 'filled') {
+            const fromX = lifelineX[fromKey], toX = lifelineX[toKey];
+            const markerId = (isReply || arrowheadType === 'open') ? 'arrowhead-open' : 'arrowhead-filled';
+
+            const path = createSVGElement('path', { d: `M ${fromX} ${yPos} L ${toX} ${yPos}`, class: isReply ? 'reply-line' : 'message-line', 'marker-end': `url(#${markerId})` });
+            const text = createSVGElement('text', { x: fromX + (toX - fromX) / 2, y: yPos - 10, 'text-anchor': 'middle', class: 'message-label' });
+            text.textContent = label;
+            umlSvg.appendChild(path); umlSvg.appendChild(text);
+        }
+
+        function drawSelfMessage(key, yPos, label, returnOffset = 0) {
+            const x = lifelineX[key];
+            const w = 40, h = 25;
+            const path = createSVGElement('path', {
+                d: `M ${x} ${yPos} L ${x + w} ${yPos} L ${x + w} ${yPos + h} L ${x + returnOffset} ${yPos + h}`,
+                class: 'message-line', 'marker-end': 'url(#arrowhead-filled)'
+            });
+            umlSvg.appendChild(path);
+            const lines = label.split('\n');
+            lines.forEach((line, i) => {
+                const text = createSVGElement('text', {
+                    x: x + w + 5, y: yPos + h / 2 + 4 + (i * 16) - ((lines.length - 1) * 8),
+                    'text-anchor': 'start', class: 'message-label'
+                });
+                text.textContent = line;
+                umlSvg.appendChild(text);
+            });
+        }
+
+        function drawActivationBar(onKey, startY, endY, offset = 0) {
+            if (lifelineX[onKey]) umlSvg.appendChild(createSVGElement('rect', { class: 'activation-bar', x: lifelineX[onKey] - 5 + offset, y: startY, width: 10, height: endY - startY }));
+        }
+
+        function log(message) { logOutput.innerHTML += `<div class="log-entry">${message}</div>`; logOutput.scrollTop = logOutput.scrollHeight; }
+
+        function simulateTyping(input, text, cb) {
+            let i = 0;
+            const interval = setInterval(() => {
+                input.value = text.slice(0, ++i);
+                if (i >= text.length) { clearInterval(interval); if (cb) cb(); }
+            }, 60);
+        }
+
+        function setupSimulationSteps() {
+            const y = { y1: 100, y2: 135, y3: 170, y4: 210, y5: 240, y5b: 300, y6: 335, y7: 370, y8: 400, y9: 460, y10: 490, y11: 555, y12: 600, y13: 660, y14: 710 };
+            simulationSteps = [
+                {
+                    description: `<strong>Schritt 1: Anfrage.</strong><br>Sie klicken in der Relying Party auf "Anmelden", um den OpenID Connect Prozess zu starten.`, action: () => {
+                        drawMessage('user', 'client', y.y1, '1. Anmelden mit ByCS');
+                        drawActivationBar('client', y.y1, y.y2);
+                    }
+                },
+                {
+                    description: `<strong>Schritt 2–3: Redirect zum OpenID Provider.</strong><br>Die Relying Party leitet Sie per HTTP-Redirect (302) zum OpenID Provider weiter — mit <code>client_id</code>, <code>redirect_uri</code>, <code>scope=openid profile email</code>, <code>response_type=code</code>, <code>state</code> (CSRF-Schutz) und <code>nonce</code> (Replay-Schutz).<br>Nonce: <span class="code">${nonce}</span>`, action: () => {
+                        drawMessage('client', 'user', y.y2, '2. Redirect (302)', true);
+                        drawMessage('user', 'auth', y.y3, '3. Auth Request (scope=openid, nonce)');
+                        drawActivationBar('auth', y.y3, y.y6);
+                        modalLoginView.classList.remove('hidden'); modalConsentView.classList.add('hidden');
+                        fakeUser.value = ''; fakePass.value = '';
+                        modalOverlay.classList.add('visible');
+                        simulateTyping(fakeUser, 'max.mustermann', () => {
+                            simulateTyping(fakePass, 'passwort123');
+                        });
+                    }
+                },
+                {
+                    description: `<strong>Schritt 4: Authentifizierung.</strong><br>Sie geben Ihre Zugangsdaten beim OpenID Provider ein und klicken "Anmelden". Der OP prüft die Credentials intern. Die Relying Party sieht Ihr Passwort niemals.`, action: () => {
+                        modalLoginView.classList.add('hidden'); modalConsentView.classList.remove('hidden');
+                        drawMessage('user', 'auth', y.y4, '4. Login');
+                        drawSelfMessage('auth', y.y5, 'Credentials prüfen', 15);
+                        drawActivationBar('auth', y.y5 + 25, y.y5 + 50, 10);
+                    }
+                },
+                {
+                    description: `<strong>Schritt 4 (Forts.): Zustimmung.</strong><br>Nach erfolgreicher Anmeldung prüfen Sie die angeforderten Scopes (<code>openid</code>, <code>profile</code>, <code>email</code>) und erlauben den Zugriff.`, action: () => {
+                        drawMessage('user', 'auth', y.y5b, '4b. Zustimmung erteilen');
+                        modalOverlay.classList.remove('visible');
+                        connectBtn.disabled = true;
+                        connectBtn.classList.add('loading');
+                        log(`Sichtbarer Teil beendet. Steuern Sie nun die unsichtbaren Schritte.`); stepControls.classList.remove('hidden');
+                    }
+                },
+                {
+                    description: `<strong>Schritt 5–6: Redirect mit Authorization Code.</strong><br>Der OP leitet Sie per Redirect zurück zur Relying Party (<code>redirect_uri</code>) — mit einem kurzlebigen Authorization Code und dem <code>state</code>-Parameter. Die RP validiert den <code>state</code> gegen den ursprünglich gesendeten Wert.<br>Code: <span class="code">${authorizationCode}</span>`, action: () => {
+                        drawMessage('auth', 'user', y.y6, '5. Redirect mit Code + state', true);
+                        drawMessage('user', 'client', y.y7, '6. Code an redirect_uri');
+                        drawSelfMessage('client', y.y8, 'state validieren', 15);
+                        drawActivationBar('client', y.y8 + 25, y.y8 + 50, 10);
+                        drawActivationBar('client', y.y7, y.y14);
+                    }
+                },
+                {
+                    description: `<strong>Schritt 7: Token Exchange (Backend).</strong><br>Die Relying Party sendet den Code zusammen mit ihrem <code>client_secret</code> an den Token-Endpoint des OP (Server-zu-Server). Der OP validiert Code und Secret intern.<br><br><span class="oidc-badge">OIDC</span> Der OP antwortet nicht nur mit einem Access Token, sondern auch mit einem <strong>ID Token</strong> (JWT) — das ist der zentrale Unterschied zu OAuth 2.0.<br>Access Token: <span class="token">${accessToken}</span><br>ID Token: <span class="id-token">${idToken}</span>`, action: () => {
+                        drawMessage('client', 'auth', y.y9, '7. Token Request (Code + Secret)');
+                        drawActivationBar('auth', y.y9, y.y11);
+                        drawSelfMessage('auth', y.y10, 'Code + Secret validieren', 15);
+                        drawActivationBar('auth', y.y10 + 25, y.y10 + 50, 10);
+                        setTimeout(() => drawMessage('auth', 'client', y.y11, 'ID Token (JWT) + Access Token', true), 800);
+                    }
+                },
+                {
+                    description: `<strong><span class="oidc-badge">OIDC</span> Schritt 8: ID Token validieren.</strong><br>Die Relying Party validiert das ID Token (JWT):<br>— <strong>Signatur</strong> prüfen (mit Public Key des OP)<br>— <strong>nonce</strong> prüfen (muss mit gesendetem Wert übereinstimmen — Replay-Schutz)<br>— <strong>Claims</strong> prüfen: <code>iss</code> (Issuer), <code>aud</code> (Audience = client_id), <code>exp</code> (Ablaufzeit)<br><br>Das ID Token enthält bereits die Identität des Users (sub, name, email). Damit ist die <em>Authentifizierung</em> abgeschlossen.`, action: () => {
+                        drawSelfMessage('client', y.y12, 'ID Token validieren\n(Signatur, nonce, Claims)', 15);
+                        drawActivationBar('client', y.y12 + 25, y.y12 + 50, 10);
+                    }
+                },
+                {
+                    description: `<strong><span class="oidc-badge">OIDC</span> Schritt 9: UserInfo Endpoint.</strong><br>Optional ruft die Relying Party mit dem Access Token weitere Identity-Claims vom UserInfo Endpoint ab — z.B. Profilbild oder Adresse. Der UserInfo Endpoint ist Teil des OpenID Providers und prüft den Access Token intern.<br><br>Kalenderdaten liefert der UserInfo Endpoint <strong>nicht</strong> — die lädt die App separat mit dem Access Token von der Kalender-API (das ist der OAuth-2.0-Teil, siehe OAuth-Simulator).`, action: () => {
+                        drawMessage('client', 'resource', y.y13, '9. GET /userinfo mit Access Token');
+                        drawActivationBar('resource', y.y13, y.y14);
+                        setTimeout(() => {
+                            drawMessage('resource', 'client', y.y14, '[Profil-Claims]', true);
+                            appInitialView.classList.add('hidden'); appConnectedView.classList.remove('hidden');
+                            appDataDisplay.innerHTML = '<h3>Identität (aus ID Token):</h3><ul><li>sub: 1234567890</li><li>name: Max Mustermann</li><li>email: max@bycs.de</li></ul><h3>UserInfo Endpoint:</h3><ul><li>Profilbild: avatar.jpg</li></ul><h3>Termine (separat via Kalender-API, OAuth 2.0):</h3><ul><li>08:30 - AEuP</li><li>09:30 - ITP</li></ul>';
+                            log('<strong>ABGESCHLOSSEN!</strong>');
+                        }, 800);
+                    }
+                }
+            ];
+        }
+
+        async function runAutomaticSimulation() {
+            connectBtn.disabled = true;
+            connectBtn.classList.add('loading');
+            log('<strong>Schritt 1–3:</strong> Anfrage & Redirect zum OpenID Provider (scope=openid profile email, nonce, state)...');
+            modalLoginView.classList.remove('hidden'); modalConsentView.classList.add('hidden');
+            fakeUser.value = ''; fakePass.value = '';
+            modalOverlay.classList.add('visible');
+            simulateTyping(fakeUser, 'max.mustermann', () => { simulateTyping(fakePass, 'passwort123'); });
+            await new Promise(resolve => {
+                const handler = () => { loginBtn.removeEventListener('click', handler); resolve(); };
+                loginBtn.addEventListener('click', handler);
+            });
+            modalLoginView.classList.add('hidden'); modalConsentView.classList.remove('hidden');
+            log('<strong>Schritt 4:</strong> Credentials geprüft. Zustimmung angefordert (openid, profile, email)...');
+            await new Promise(resolve => {
+                const handler = () => { allowBtn.removeEventListener('click', handler); resolve(); };
+                allowBtn.addEventListener('click', handler);
+            });
+            modalOverlay.classList.remove('visible');
+            log('<strong>Schritt 4 (Forts.):</strong> Zustimmung erteilt.');
+            await new Promise(r => setTimeout(r, 800));
+            log(`<strong>Schritt 5–6:</strong> Redirect zurück zur Relying Party mit Authorization Code (+ state).`);
+            await new Promise(r => setTimeout(r, 800));
+            log('<strong>Schritt 7:</strong> Token Exchange — Code + client_secret gegen <strong>ID Token (JWT) + Access Token</strong> getauscht.');
+            await new Promise(r => setTimeout(r, 1200));
+            log('<strong>Schritt 8:</strong> <span class="oidc-badge">OIDC</span> ID Token validiert (Signatur, nonce, Claims). Identität bestätigt.');
+            await new Promise(r => setTimeout(r, 1000));
+            log('<strong>Schritt 9:</strong> UserInfo Endpoint abgefragt (Identity-Claims). Kalenderdaten lädt die App separat mit dem Access Token von der Kalender-API.');
+            appInitialView.classList.add('hidden');
+            appConnectedView.classList.remove('hidden');
+            appDataDisplay.innerHTML = '<h3>Identität (aus ID Token):</h3><ul><li>sub: 1234567890</li><li>name: Max Mustermann</li><li>email: max@bycs.de</li></ul><h3>Termine (separat via Kalender-API, OAuth 2.0):</h3><ul><li>08:30 - AEuP</li><li>09:30 - ITP</li></ul>';
+            log('<strong>ABGESCHLOSSEN!</strong><br><br>Das war die einfache Ansicht. Starten Sie neu und aktivieren Sie "Im Detail anzeigen", um den Prozess Schritt für Schritt zu sehen!');
+        }
+
+        function executeStep(stepIndex) {
+            if (stepIndex < 0 || stepIndex >= simulationSteps.length) return;
+            const step = simulationSteps[stepIndex];
+            log(step.description); step.action();
+            currentStep = stepIndex; updateStepControls();
+        }
+
+        function updateStepControls() {
+            const backgroundStepsStart = 4;
+            prevStepBtn.disabled = currentStep < backgroundStepsStart;
+            nextStepBtn.disabled = currentStep >= simulationSteps.length - 1;
+        }
+
+        connectBtn.addEventListener('click', () => {
+            if (detailCheckbox.checked) { if (currentStep === -1) { executeStep(0); setTimeout(() => executeStep(1), 800); } }
+            else { runAutomaticSimulation(); }
+        });
+
+        loginBtn.addEventListener('click', () => { if (detailCheckbox.checked && currentStep === 1) executeStep(2); });
+        allowBtn.addEventListener('click', () => { if (detailCheckbox.checked && currentStep === 2) { executeStep(3); setTimeout(() => executeStep(4), 500); } });
+        nextStepBtn.addEventListener('click', () => { if (currentStep < simulationSteps.length - 1 && currentStep >= 4) executeStep(currentStep + 1); });
+        prevStepBtn.addEventListener('click', () => {
+            if (currentStep >= 5) {
+                const targetStep = currentStep - 1;
+                drawUMLBase();
+                for (let i = 0; i < simulationSteps.length; i++) {
+                    if (i <= targetStep) {
+                        const tempStyle = document.createElement('style'); tempStyle.innerHTML = `* { animation: none !important; transition: none !important; }`; document.head.appendChild(tempStyle);
+                        simulationSteps[i].action();
+                        document.head.removeChild(tempStyle);
+                    }
+                }
+                currentStep = targetStep; updateStepControls();
+            }
+        });
+
+        detailCheckbox.addEventListener('change', resetSimulation);
+
+        function resetSimulation() {
+            connectBtn.disabled = false;
+            connectBtn.classList.remove('loading');
+            currentStep = -1;
+            authorizationCode = `auth_code_${Math.random().toString(16).slice(2, 12)}`;
+            accessToken = `access_tkn_${Math.random().toString(16).slice(2)}`;
+            nonce = `nonce_${Math.random().toString(16).slice(2, 14)}`;
+            const b64url = (obj) => btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            idToken = `${b64url({ alg: 'RS256' })}.${b64url({ sub: '1234567890', name: 'Max Mustermann', email: 'max@bycs.de', nonce: nonce })}.signature`;
+
+            modalOverlay.classList.remove('visible'); appInitialView.classList.remove('hidden');
+            appConnectedView.classList.add('hidden'); appDataDisplay.innerHTML = ''; connectBtn.disabled = false;
+            logOutput.innerHTML = ''; stepControls.classList.add('hidden');
+            modalLoginView.classList.remove('hidden'); modalConsentView.classList.add('hidden');
+            fakeUser.value = ''; fakePass.value = '';
+
+            vizContainer.classList.toggle('hidden', !detailCheckbox.checked);
+            if (detailCheckbox.checked) {
+                drawUMLBase(); setupSimulationSteps(); updateStepControls();
+                log('Detail-Modus aktiv. Klicken Sie auf "Mit ByCS anmelden", um den Prozess zu starten.');
+            } else {
+                log('Einfacher Modus. Klicken Sie auf "Mit ByCS anmelden", um den automatischen Ablauf zu starten.');
+            }
+        }
+
+        resetBtn.addEventListener('click', resetSimulation);
+        resetSimulation();
+    </script>
+</body>
+
+</html>
